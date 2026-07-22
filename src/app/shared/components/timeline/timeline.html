@@ -1,0 +1,11 @@
+<div class="timeline">
+  <div class="timeline-row">
+    @for (tick of ticks(); track tick.year) {
+      <a class="tick" [class.now]="tick.active" [routerLink]="tick.link">
+        <span class="tick-dot"></span>
+        <span class="tick-year font-mono">{{ tick.year }}</span>
+        <span class="tick-era">{{ tick.era }}</span>
+      </a>
+    }
+  </div>
+</div>

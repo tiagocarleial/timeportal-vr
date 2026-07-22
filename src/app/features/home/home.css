@@ -1,0 +1,28 @@
+.hero {
+  padding: 64px 40px 8px;
+}
+.hero h2 {
+  font-size: clamp(2.2rem, 1.8rem + 1.6vw, 3.1rem);
+  max-width: 13ch;
+}
+.hero p {
+  color: var(--text-muted);
+  max-width: 48ch;
+  margin-top: 14px;
+  font-size: 1.0625rem;
+}
+.section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 56px 40px 20px;
+}
+.section-head h3 {
+  font-size: 1.375rem;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 20px;
+  padding: 0 40px 48px;
+}

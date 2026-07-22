@@ -1,0 +1,47 @@
+@if (experience(); as exp) {
+  <div class="viewer frame" [class]="exp.scene">
+    <div class="horizon"></div>
+    <div class="hud">
+      <div class="hud-row">
+        <span class="hud-chip font-mono">YAW 000° · PITCH 000°</span>
+        <span class="hud-chip font-mono">{{ exp.resolution.includes('8192') ? '8K' : '6K' }} · {{ exp.resolution }} · GPano</span>
+      </div>
+    </div>
+    @for (hotspot of exp.hotspots; track hotspot.title) {
+      <div class="hotspot" [style.top.%]="hotspot.pitch" [style.left.%]="hotspot.yaw">
+        <span class="hotspot-label font-mono">{{ hotspot.title }}</span>
+      </div>
+    }
+  </div>
+
+  <div class="viewer-panel">
+    <div>
+      <h3>{{ exp.title }}</h3>
+      <span class="viewer-date font-mono">{{ exp.date }} · {{ exp.location }}</span>
+      <p>{{ exp.description }}</p>
+      <div class="controls-row">
+        <a class="btn btn-primary" href="#">▶ Enter VR</a>
+        <button class="chip-toggle">🔊 Narração — PT-BR</button>
+        <button class="chip-toggle">🌐 EN · PT · DE</button>
+      </div>
+    </div>
+    <div class="related">
+      <h5>Linha do tempo relacionada</h5>
+      <ul class="related-list">
+        @for (item of related(); track item.slug) {
+          <li [class.current]="item.slug === exp.slug">
+            <a [routerLink]="['/experience', item.slug]">
+              <span class="r-year font-mono">{{ item.date }}</span>
+              <span class="r-title">{{ item.title }}</span>
+            </a>
+          </li>
+        }
+      </ul>
+    </div>
+  </div>
+} @else {
+  <div class="not-found">
+    <h2>Experiência não encontrada</h2>
+    <a routerLink="/" class="btn btn-primary">Voltar para Home</a>
+  </div>
+}

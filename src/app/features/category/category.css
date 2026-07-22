@@ -1,0 +1,45 @@
+.crumb {
+  padding: 20px 40px 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.crumb a {
+  text-decoration: none;
+  color: var(--text);
+}
+.cat-head {
+  padding: 14px 40px 8px;
+}
+.cat-head h2 {
+  font-size: clamp(1.9rem, 1.6rem + 1vw, 2.5rem);
+}
+.cat-head p {
+  color: var(--text-muted);
+  max-width: 56ch;
+  margin-top: 12px;
+}
+.cat-meta {
+  display: flex;
+  gap: 24px;
+  margin-top: 20px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.cat-meta b {
+  color: var(--brass);
+  font-weight: 500;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 20px;
+  padding: 28px 40px 48px;
+}
+.not-found {
+  padding: 80px 40px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}

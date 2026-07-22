@@ -1,0 +1,14 @@
+<a class="card frame" [routerLink]="['/experience', experience().slug]">
+  <div class="thumb" [class]="experience().scene">
+    <span class="meta-chip">{{ experience().coordinates }}</span>
+  </div>
+  <div class="card-body">
+    <span class="eyebrow">{{ experience().date }}</span>
+    <h4>{{ experience().title }}</h4>
+    <p>{{ experience().description }}</p>
+    <div class="card-foot">
+      <span>{{ experience().resolution }}</span>
+      <span>→</span>
+    </div>
+  </div>
+</a>

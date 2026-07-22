@@ -1,0 +1,27 @@
+<div #canvasHost class="stage"></div>
+
+<div class="veil">
+  @if (lockedExperience(); as exp) {
+    <p class="line title">{{ exp.title }}</p>
+    <p class="line locked font-mono">Este portal abre no VR — {{ exp.date }} · {{ exp.location }}</p>
+  } @else if (hoveredMarker(); as exp) {
+    <p class="line title">{{ exp.title }}</p>
+    <p class="line meta font-mono">{{ exp.date }} · {{ exp.location }}</p>
+  } @else {
+    <p class="line title quiet">Escolha um ponto no tempo.</p>
+    <p class="line meta font-mono">Arraste para girar · clique num marcador</p>
+  }
+</div>
+
+<div class="entry">
+  @if (xrSupported() === true) {
+    <button type="button" class="enter" (click)="enterVR()" [disabled]="xrPresenting()">
+      {{ xrPresenting() ? 'Sessão ativa' : 'Entrar em VR' }}
+    </button>
+  } @else if (xrSupported() === false) {
+    <p class="line meta font-mono">Conecte um headset e abra por ele para atravessar</p>
+  }
+  @if (xrError(); as err) {
+    <p class="line error font-mono">{{ err }}</p>
+  }
+</div>

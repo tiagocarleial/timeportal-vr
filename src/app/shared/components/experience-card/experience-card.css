@@ -1,0 +1,49 @@
+.card {
+  text-decoration: none;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--surface-raised);
+  display: block;
+}
+.thumb {
+  aspect-ratio: 16 / 10;
+  position: relative;
+}
+.meta-chip {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.625rem;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.86);
+  background: rgba(0, 0, 0, 0.28);
+  padding: 3px 7px;
+  border-radius: 2px;
+}
+.card-body {
+  padding: 16px 18px 20px;
+}
+.card-body .eyebrow {
+  display: block;
+  margin-bottom: 8px;
+}
+.card-body h4 {
+  font-size: 1.0625rem;
+  margin-bottom: 6px;
+}
+.card-body p {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+.card-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+}

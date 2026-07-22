@@ -1,0 +1,58 @@
+# See https://docs.github.com/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
+
+# Compiled output
+/dist
+/tmp
+/out-tsc
+/bazel-out
+
+# Node
+/node_modules
+npm-debug.log
+yarn-error.log
+
+# IDEs and editors
+.idea/
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/mcp.json
+.history/*
+
+# Miscellaneous
+/.angular/cache
+.sass-cache/
+/connect.lock
+/coverage
+/libpeerconnection.log
+testem.log
+/typings
+__screenshots__/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Pipeline de geração — o ComfyUI é um clone de terceiros com venv e ~16.5 GB de
+# pesos dentro. O que é nosso (driver, workflows, downloader) fica fora dele e
+# continua versionado; os pesos se rebaixam com pipeline/download_models.py.
+/pipeline/ComfyUI/
+
+# Panoramas de calibração e smoke test — descartáveis, regeráveis pelo driver.
+# Os panoramas de produção (public/panoramas/<slug-do-catalogo>.jpg) sobem.
+/public/panoramas/smoketest*.jpg
+/public/panoramas/dday-*.jpg
+/public/panoramas/loratest.jpg
+# Primeira geração, 8K, antes do LoRA equirect — substituída por
+# d-day-omaha-beach.jpg. Fica no disco como comparação, fora da história.
+/public/panoramas/d-day.jpg

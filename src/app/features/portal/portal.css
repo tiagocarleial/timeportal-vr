@@ -1,0 +1,118 @@
+/* Black regardless of the app theme -- this screen is a room, not a document. */
+:host {
+  position: fixed;
+  inset: 0;
+  display: block;
+  background: #000;
+  overflow: hidden;
+}
+
+.stage {
+  position: absolute;
+  inset: 0;
+}
+
+.stage canvas {
+  display: block;
+}
+
+/* Text floats over the scene and never takes the pointer -- dragging the globe
+   has to work everywhere, including straight through the caption. */
+.veil,
+.entry {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  pointer-events: none;
+  padding: 0 1.5rem;
+  text-align: center;
+}
+
+.veil {
+  bottom: 6.5rem;
+}
+
+.entry {
+  bottom: 2.5rem;
+}
+
+.line {
+  margin: 0;
+  color: #EDE6D6;
+  animation: rise 600ms ease-out both;
+}
+
+.title {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: clamp(1.35rem, 3.2vw, 2rem);
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+.title.quiet {
+  opacity: 0.62;
+}
+
+.meta {
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(237, 230, 214, 0.42);
+}
+
+.locked {
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  color: #D9A857;
+}
+
+.error {
+  font-size: 0.75rem;
+  color: #E08A6A;
+}
+
+.enter {
+  pointer-events: auto;
+  cursor: pointer;
+  background: transparent;
+  color: #D9A857;
+  border: 1px solid rgba(217, 168, 87, 0.45);
+  border-radius: 999px;
+  padding: 0.7rem 2.1rem;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.76rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  transition: border-color 220ms ease, color 220ms ease, background 220ms ease;
+}
+
+.enter:hover:not(:disabled) {
+  border-color: #D9A857;
+  background: rgba(217, 168, 87, 0.09);
+}
+
+.enter:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .line {
+    animation: none;
+  }
+}

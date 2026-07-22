@@ -1,0 +1,17 @@
+<div class="hero">
+  <span class="eyebrow">65,000,000 BCE — 1969 CE</span>
+  <h2>Step into history.</h2>
+  <p>Panoramas em 8K de momentos que mudaram o mundo, reconstruídos para Meta Quest e navegador WebXR.</p>
+</div>
+
+<app-timeline />
+
+<div class="section-head">
+  <h3>Catálogo</h3>
+  <span class="eyebrow">{{ categories.length }} categorias</span>
+</div>
+<div class="grid">
+  @for (category of categories; track category.slug) {
+    <app-category-card [category]="category" />
+  }
+</div>

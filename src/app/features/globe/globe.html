@@ -1,0 +1,56 @@
+<div class="hero">
+  <span class="eyebrow">Protótipo — Globe Hub</span>
+  <h2>Escolha um ponto no tempo.</h2>
+  <p>Arraste para girar, aponte para um marcador. Segure o gatilho ~0,3s pra confirmar e abrir o portal — sem sair da sessão VR.</p>
+
+  <div class="xr-row">
+    @if (xrSupported() === true) {
+      <button type="button" class="btn btn-primary" (click)="enterVR()" [disabled]="xrPresenting()">
+        {{ xrPresenting() ? '● Sessão VR ativa' : '▶ Enter VR' }}
+      </button>
+    } @else if (xrSupported() === false) {
+      <span class="xr-hint font-mono">WebXR não disponível neste navegador/dispositivo — modo desktop apenas.</span>
+    }
+    @if (xrError(); as err) {
+      <span class="xr-error font-mono">{{ err }}</span>
+    }
+  </div>
+</div>
+
+@if (mode() === 'globe') {
+  <div class="era-row">
+    @for (era of eras; track era.label) {
+      <button
+        type="button"
+        class="era-chip"
+        [class.active]="activeEra().label === era.label"
+        (click)="selectEra(era)"
+      >
+        {{ era.label }}
+      </button>
+    }
+  </div>
+}
+
+<div class="stage frame">
+  <div #canvasHost class="canvas-host"></div>
+
+  <div class="info-bar">
+    @if (mode() === 'panorama') {
+      <button type="button" class="btn btn-ghost return-btn" (click)="returnToGlobe()">◐ Voltar ao Globo</button>
+      @if (panoramaExperience(); as exp) {
+        <span class="info-title">{{ exp.title }}</span>
+        <span class="info-meta font-mono">{{ exp.date }} · {{ exp.location }}</span>
+      }
+      @if (hoveredHotspot(); as spot) {
+        <span class="info-hotspot font-mono">◆ {{ spot.title }}</span>
+      }
+      <span class="info-hint font-mono">No headset: aperte o botão grip pra voltar</span>
+    } @else if (hoveredMarker(); as exp) {
+      <span class="info-title">{{ exp.title }}</span>
+      <span class="info-meta font-mono">{{ exp.date }} · {{ exp.location }} · {{ exp.resolution }}</span>
+    } @else {
+      <span class="info-hint font-mono">Passe o cursor sobre um marcador brass</span>
+    }
+  </div>
+</div>

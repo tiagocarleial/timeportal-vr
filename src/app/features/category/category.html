@@ -1,0 +1,22 @@
+@if (category(); as cat) {
+  <div class="crumb font-mono"><a routerLink="/">Home</a> / {{ cat.name }}</div>
+  <div class="cat-head">
+    <h2>{{ cat.name }}</h2>
+    <p>{{ cat.description }}</p>
+    <div class="cat-meta font-mono">
+      <span>PERÍODO <b>{{ cat.period }}</b></span>
+      <span>EXPERIÊNCIAS <b>{{ experiences().length }}</b></span>
+      <span>RESOLUÇÃO <b>ATÉ 8K</b></span>
+    </div>
+  </div>
+  <div class="grid">
+    @for (experience of experiences(); track experience.slug) {
+      <app-experience-card [experience]="experience" />
+    }
+  </div>
+} @else {
+  <div class="not-found">
+    <h2>Categoria não encontrada</h2>
+    <a routerLink="/" class="btn btn-primary">Voltar para Home</a>
+  </div>
+}

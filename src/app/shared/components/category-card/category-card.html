@@ -1,0 +1,10 @@
+<a class="card frame" [routerLink]="['/category', category().slug]">
+  <div class="thumb" [class]="category().scene">
+    <span class="meta-chip">{{ category().period }}</span>
+  </div>
+  <div class="card-body">
+    <span class="eyebrow">{{ category().eyebrow }}</span>
+    <h4>{{ category().name }}</h4>
+    <p>{{ category().description }}</p>
+  </div>
+</a>
