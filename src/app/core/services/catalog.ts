@@ -131,10 +131,15 @@ const EXPERIENCES: Experience[] = [
     coordinates: '52.5186° N, 13.3762° E',
     lat: 52.5186,
     lng: 13.3762,
-    resolution: '8192×4096',
+    resolution: '4096×2048',
     scene: 'scene-wwii',
-    description: 'Em frente ao Reichstag, nos últimos dias do Terceiro Reich.',
-    hotspots: [],
+    description:
+      'Em frente ao Reichstag em chamas, nos últimos dias do Terceiro Reich: o Exército Vermelho avança entre escombros com tanques T-34, sob fumaça e o Portão de Brandemburgo ao fundo.',
+    hotspots: [
+      { yaw: 50, pitch: 42, title: 'Reichstag em Chamas', description: 'Sede do parlamento alemão, alvo simbólico da tomada de Berlim.' },
+      { yaw: 40, pitch: 48, title: 'Portão de Brandemburgo', description: 'Marco de Berlim, cercado por ruínas e fumaça.' },
+      { yaw: 57, pitch: 62, title: 'Tanque T-34 “За Победу”', description: "Blindado soviético com a inscrição 'Pela Vitória'." },
+    ],
   },
   {
     id: 'colosseum-80ce',
