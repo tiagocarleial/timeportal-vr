@@ -7,16 +7,35 @@ const MARKER_RADIUS = EARTH_RADIUS + 0.012;
 const PANORAMA_RADIUS = 6;
 const HOTSPOT_RADIUS = PANORAMA_RADIUS - 0.5;
 const XR_GROUP_POSITION = new THREE.Vector3(0, 1.3, -1.6);
-const SELECT_DWELL_MS = 350;
 const FADE_MS = 380;
 
-// Thumbstick-driven globe navigation inside immersive VR.
+// Globe navigation inside immersive VR.
 const XR_STICK_DEADZONE = 0.15;
 const XR_ROTATE_SPEED = 1.4; // rad/s at full stick deflection
 const XR_AUTOROTATE_SPEED = 0.15; // rad/s idle spin
 const XR_ZOOM_SPEED = 1.2; // scale factor rate at full deflection
 const XR_ZOOM_MIN = 0.45;
 const XR_ZOOM_MAX = 2.5;
+
+// Trigger-grab: hold the trigger over empty space and sweep the controller to
+// drag the globe around, like grabbing a physical desk globe. Gain > 1 turns a
+// comfortable wrist sweep into a full spin; flip the sign of a term if a build
+// on real hardware feels reversed.
+const XR_GRAB_ROTATE_GAIN = 2.2;
+const XR_GRAB_PITCH_MIN = -0.85; // clamp so grabbing never tips past the poles
+const XR_GRAB_PITCH_MAX = 0.85;
+// Treat a trigger press+release as a "click" (open the marker) only if the
+// controller barely moved between them; more than this is read as a drag.
+const XR_SELECT_MOVE_TOLERANCE = 0.07; // radians
+
+// Panorama look-around: thumbstick left/right spins the 360 image around you so
+// you don't have to physically turn to see behind you.
+const XR_PANO_LOOK_SPEED = 1.3; // rad/s at full stick deflection
+
+// In-scene tooltip sizing (world units). The panorama shell is far bigger than
+// the globe, so its labels need to be physically larger to read at distance.
+const LABEL_HEIGHT_GLOBE = 0.16;
+const LABEL_HEIGHT_PANORAMA = 0.75;
 
 const COLOR_INK = 0x181c25;
 const COLOR_GRID = 0xc08a3e;
@@ -88,6 +107,18 @@ export class GlobeScene {
   private resizeObserver: ResizeObserver;
   private clock = new THREE.Clock();
 
+  // Trigger-grab drag state (globe mode). One controller grabs at a time.
+  private grabController: THREE.XRTargetRaySpace | null = null;
+  private grabPrev = { yaw: 0, pitch: 0 };
+  // A trigger press that started on a marker: opens it on release if the aim
+  // didn't wander (otherwise it was a drag that happened to start on a marker).
+  private pendingSelect: { controller: THREE.XRTargetRaySpace; marker: MarkerMesh; yaw: number; pitch: number } | null = null;
+
+  // A single floating label reused for whichever marker/hotspot is aimed at.
+  private hoverLabel!: THREE.Sprite;
+  private labelTarget: THREE.Object3D | null = null;
+  private labelHeight = LABEL_HEIGHT_GLOBE;
+
   private mode: HubMode = 'globe';
 
   // The panorama is the thing worth putting a headset on for, so outside XR the
@@ -128,6 +159,7 @@ export class GlobeScene {
     this.buildMarkers(experiences);
     this.buildLights();
     this.buildFadeOverlay();
+    this.buildHoverLabel();
     this.setupControllers();
 
     this.renderer.domElement.addEventListener('pointermove', this.onPointerMove);
@@ -201,6 +233,10 @@ export class GlobeScene {
         }
       }
     });
+    // The hover label is a Sprite, so the Mesh/Points/Line sweep above skips it.
+    const labelMaterial = this.hoverLabel.material as THREE.SpriteMaterial;
+    labelMaterial.map?.dispose();
+    labelMaterial.dispose();
     this.renderer.dispose();
     this.container.removeChild(this.renderer.domElement);
   }
@@ -325,6 +361,9 @@ export class GlobeScene {
   // ------------------------------------------------------------ panorama
 
   private showPanorama(experience: Experience): void {
+    // Each experience opens facing forward, clearing any thumbstick look-around
+    // carried over from the last panorama.
+    this.panoramaGroup.rotation.set(0, 0, 0);
     let group = this.panoramaCache.get(experience.slug);
     if (!group) {
       group = this.buildPanoramaGroup(experience);
@@ -487,8 +526,6 @@ export class GlobeScene {
   private setupControllers(): void {
     for (let i = 0; i < 2; i++) {
       const controller = this.renderer.xr.getController(i);
-      controller.userData['dwellStart'] = null;
-      controller.userData['dwellTarget'] = null;
 
       const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1)]);
       const ray = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: COLOR_BRASS, transparent: true, opacity: 0.7 }));
@@ -496,18 +533,58 @@ export class GlobeScene {
       ray.scale.z = 1.4;
       controller.add(ray);
 
-      controller.addEventListener('selectstart', () => {
-        controller.userData['dwellStart'] = performance.now();
-      });
-      controller.addEventListener('selectend', () => {
-        controller.userData['dwellStart'] = null;
-        controller.userData['dwellTarget'] = null;
-      });
+      controller.addEventListener('selectstart', () => this.onXRSelectStart(controller));
+      controller.addEventListener('selectend', () => this.onXRSelectEnd(controller));
       controller.addEventListener('squeezestart', () => this.returnToGlobe());
 
       this.scene.add(controller);
       this.controllers.push(controller);
     }
+  }
+
+  private controllerYawPitch(controller: THREE.XRTargetRaySpace): { yaw: number; pitch: number } {
+    const dir = new THREE.Vector3(0, 0, -1).applyMatrix4(new THREE.Matrix4().extractRotation(controller.matrixWorld)).normalize();
+    return { yaw: Math.atan2(dir.x, dir.z), pitch: Math.asin(THREE.MathUtils.clamp(dir.y, -1, 1)) };
+  }
+
+  private raycastMarker(controller: THREE.XRTargetRaySpace): MarkerMesh | null {
+    const origin = new THREE.Vector3().setFromMatrixPosition(controller.matrixWorld);
+    const direction = new THREE.Vector3(0, 0, -1).applyMatrix4(new THREE.Matrix4().extractRotation(controller.matrixWorld));
+    this.raycaster.set(origin, direction);
+    return (this.raycaster.intersectObjects(this.markers, false)[0]?.object as MarkerMesh) ?? null;
+  }
+
+  // Trigger down: on a marker it arms a select; on empty space it grabs the
+  // globe so the coming controller sweep drags it. Only meaningful on the globe.
+  private onXRSelectStart(controller: THREE.XRTargetRaySpace): void {
+    if (this.mode !== 'globe') return;
+    const marker = this.raycastMarker(controller);
+    if (marker) {
+      this.pendingSelect = { controller, marker, ...this.controllerYawPitch(controller) };
+      return;
+    }
+    this.grabController = controller;
+    this.grabPrev = this.controllerYawPitch(controller);
+  }
+
+  // Trigger up: release any grab; if the press began on a marker and the aim
+  // barely moved, treat it as a click and open that experience.
+  private onXRSelectEnd(controller: THREE.XRTargetRaySpace): void {
+    if (this.grabController === controller) this.grabController = null;
+
+    const pending = this.pendingSelect;
+    if (!pending || pending.controller !== controller) return;
+    this.pendingSelect = null;
+
+    const { yaw, pitch } = this.controllerYawPitch(controller);
+    const moved = Math.hypot(this.wrapAngle(yaw - pending.yaw), pitch - pending.pitch);
+    if (moved < XR_SELECT_MOVE_TOLERANCE && this.raycastMarker(controller) === pending.marker) {
+      void this.transitionTo('panorama', pending.marker.userData.experience);
+    }
+  }
+
+  private wrapAngle(a: number): number {
+    return Math.atan2(Math.sin(a), Math.cos(a));
   }
 
   private onXRSessionStart = (): void => {
@@ -519,6 +596,8 @@ export class GlobeScene {
   private onXRSessionEnd = (): void => {
     this.controls.enabled = true;
     this.globeGroup.position.set(0, 0, 0);
+    this.grabController = null;
+    this.pendingSelect = null;
     this.callbacks.onXRStateChange(false);
   };
 
@@ -537,37 +616,143 @@ export class GlobeScene {
       return;
     }
 
-    const target = (hits[0]?.object as MarkerMesh) ?? null;
-    const dwellTarget = controller.userData['dwellTarget'] as MarkerMesh | null;
-    let dwellStart = controller.userData['dwellStart'] as number | null;
+    // Don't let the grabbing controller's ray, which sweeps across the globe
+    // during a drag, keep re-targeting markers under it.
+    if (this.grabController === controller) return;
+    this.setHoveredMarker((hits[0]?.object as MarkerMesh) ?? null);
+  }
 
-    if (target !== dwellTarget) {
-      controller.userData['dwellTarget'] = target;
-      dwellStart = dwellStart !== null ? performance.now() : null;
-      controller.userData['dwellStart'] = dwellStart;
-      this.setHoveredMarker(target);
+  // ------------------------------------------------------------- tooltip
+
+  /**
+   * A single billboarded label reused for whichever marker or hotspot is being
+   * aimed at. It lives in world space so it shows in both the desktop preview
+   * and — crucially — inside the headset, where the DOM HUD isn't visible.
+   */
+  private buildHoverLabel(): void {
+    const material = new THREE.SpriteMaterial({ transparent: true, depthTest: false, depthWrite: false });
+    this.hoverLabel = new THREE.Sprite(material);
+    this.hoverLabel.visible = false;
+    this.hoverLabel.renderOrder = 998;
+    this.scene.add(this.hoverLabel);
+  }
+
+  private setLabel(target: THREE.Object3D | null, title = '', subtitle = '', worldHeight = LABEL_HEIGHT_GLOBE): void {
+    this.labelTarget = target;
+    if (!target) {
+      this.hoverLabel.visible = false;
+      return;
+    }
+    const { texture, aspect } = this.makeLabelTexture(title, subtitle);
+    const material = this.hoverLabel.material as THREE.SpriteMaterial;
+    material.map?.dispose();
+    material.map = texture;
+    material.needsUpdate = true;
+    this.labelHeight = worldHeight;
+    this.hoverLabel.scale.set(worldHeight * aspect, worldHeight, 1);
+    this.hoverLabel.visible = true;
+    this.updateLabelPosition();
+  }
+
+  private updateLabelPosition(): void {
+    if (!this.labelTarget || !this.hoverLabel.visible) return;
+    const p = this.labelTarget.getWorldPosition(new THREE.Vector3());
+    p.y += this.labelHeight * 0.85; // lift clear of the marker/hotspot dot
+    this.hoverLabel.position.copy(p);
+  }
+
+  private makeLabelTexture(title: string, subtitle: string): { texture: THREE.CanvasTexture; aspect: number } {
+    const width = 640;
+    const height = subtitle ? 200 : 132;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d')!;
+
+    const pad = 28;
+    const radius = 28;
+    ctx.fillStyle = 'rgba(24,28,37,0.92)';
+    ctx.strokeStyle = 'rgba(217,168,87,0.85)';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.roundRect(pad / 2, pad / 2, width - pad, height - pad, radius);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#f4ecd8';
+    ctx.font = '600 46px "IBM Plex Sans", system-ui, sans-serif';
+    this.fillClipped(ctx, title, pad, subtitle ? height * 0.36 : height / 2, width - pad * 2);
+
+    if (subtitle) {
+      ctx.fillStyle = 'rgba(217,168,87,0.95)';
+      ctx.font = '400 32px "IBM Plex Sans", system-ui, sans-serif';
+      this.fillClipped(ctx, subtitle, pad, height * 0.66, width - pad * 2);
     }
 
-    if (target && dwellStart !== null) {
-      if (performance.now() - dwellStart >= SELECT_DWELL_MS) {
-        controller.userData['dwellStart'] = null;
-        void this.transitionTo('panorama', target.userData.experience);
-      }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+    return { texture, aspect: width / height };
+  }
+
+  private fillClipped(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number): void {
+    let str = text;
+    if (ctx.measureText(str).width <= maxWidth) {
+      ctx.fillText(str, x, y);
+      return;
     }
+    while (str.length > 1 && ctx.measureText(str + '…').width > maxWidth) str = str.slice(0, -1);
+    ctx.fillText(str + '…', x, y);
   }
 
   /**
    * In immersive VR the OrbitControls are disabled (the headset owns the
-   * camera), so the globe is driven directly from the thumbsticks: horizontal
-   * axis spins it, vertical axis zooms via the group scale. With no input it
-   * keeps a slow auto-rotate so the far-side markers come around on their own.
+   * camera), so navigation is driven from the controllers.
+   *
+   * Globe: hold the trigger and sweep the controller to grab and drag the globe
+   * (the primary, most natural gesture); the thumbstick stays as a comfort
+   * option — horizontal spins, vertical zooms via the group scale. With no input
+   * it keeps a slow auto-rotate so far-side markers come around on their own.
+   *
+   * Panorama: the thumbstick's horizontal axis spins the 360 image around you so
+   * you can look left/right without physically turning your body.
+   *
    * Quest maps the thumbstick to axes[2]/axes[3]; axes[0]/axes[1] is the
    * fallback for controllers that expose the stick there.
    */
   private updateXRNavigation(delta: number): void {
-    if (this.mode !== 'globe') return;
     const session = this.renderer.xr.getSession();
     if (!session) return;
+
+    if (this.mode === 'panorama') {
+      let look = 0;
+      for (const source of session.inputSources) {
+        const x = source.gamepad?.axes?.[2] ?? source.gamepad?.axes?.[0] ?? 0;
+        if (Math.abs(x) > XR_STICK_DEADZONE) look += x;
+      }
+      if (Math.abs(look) > 0.01) this.panoramaGroup.rotation.y -= look * XR_PANO_LOOK_SPEED * delta;
+      return;
+    }
+
+    if (this.mode !== 'globe') return;
+
+    // Trigger-grab: the grabbing controller's sweep since last frame drags the
+    // globe. Yaw follows the hand; pitch tilts it, clamped short of the poles.
+    let grabbing = false;
+    if (this.grabController) {
+      grabbing = true;
+      const { yaw, pitch } = this.controllerYawPitch(this.grabController);
+      const dYaw = this.wrapAngle(yaw - this.grabPrev.yaw);
+      const dPitch = pitch - this.grabPrev.pitch;
+      this.grabPrev = { yaw, pitch };
+      this.globeGroup.rotation.y += dYaw * XR_GRAB_ROTATE_GAIN;
+      this.globeGroup.rotation.x = THREE.MathUtils.clamp(
+        this.globeGroup.rotation.x - dPitch * XR_GRAB_ROTATE_GAIN,
+        XR_GRAB_PITCH_MIN,
+        XR_GRAB_PITCH_MAX,
+      );
+    }
 
     let rotateInput = 0;
     let zoomInput = 0;
@@ -581,8 +766,8 @@ export class GlobeScene {
     }
 
     const manualRotate = Math.abs(rotateInput) > 0.01;
-    const spin = manualRotate ? -rotateInput * XR_ROTATE_SPEED : XR_AUTOROTATE_SPEED;
-    this.globeGroup.rotation.y += spin * delta;
+    if (manualRotate) this.globeGroup.rotation.y += -rotateInput * XR_ROTATE_SPEED * delta;
+    else if (!grabbing) this.globeGroup.rotation.y += XR_AUTOROTATE_SPEED * delta;
 
     if (Math.abs(zoomInput) > 0.01) {
       // Stick forward reads negative -> zoom in (scale up).
@@ -596,6 +781,12 @@ export class GlobeScene {
     if (this.hoveredMarker) this.hoveredMarker.scale.setScalar(1);
     this.hoveredMarker = target;
     if (this.hoveredMarker) this.hoveredMarker.scale.setScalar(1.6);
+    if (target) {
+      const e = target.userData.experience;
+      this.setLabel(target, e.title, `${this.formatYear(e.year)} · ${e.location}`, LABEL_HEIGHT_GLOBE);
+    } else {
+      this.setLabel(null);
+    }
     this.callbacks.onMarkerHover(target?.userData.experience ?? null);
   }
 
@@ -604,7 +795,21 @@ export class GlobeScene {
     if (this.hoveredHotspot) this.hoveredHotspot.scale.setScalar(1);
     this.hoveredHotspot = target;
     if (this.hoveredHotspot) this.hoveredHotspot.scale.setScalar(1.4);
+    if (target) {
+      const h = target.userData.hotspot;
+      this.setLabel(target, h.title, h.description, LABEL_HEIGHT_PANORAMA);
+    } else {
+      this.setLabel(null);
+    }
     this.callbacks.onHotspotHover(target?.userData.hotspot ?? null);
+  }
+
+  private formatYear(year: number): string {
+    if (year < 0) {
+      const magnitude = Math.abs(year);
+      return magnitude >= 100000 ? `${(magnitude / 1_000_000).toLocaleString('pt-BR')} milhões de anos atrás` : `${magnitude} a.C.`;
+    }
+    return `${year}`;
   }
 
   // ------------------------------------------------------------------ mouse
@@ -663,6 +868,7 @@ export class GlobeScene {
     } else if (this.mode !== 'transitioning') {
       this.controls.update();
     }
+    this.updateLabelPosition();
     this.renderer.render(this.scene, this.camera);
   };
 }
