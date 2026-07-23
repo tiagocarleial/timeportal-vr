@@ -10,6 +10,14 @@ const XR_GROUP_POSITION = new THREE.Vector3(0, 1.3, -1.6);
 const SELECT_DWELL_MS = 350;
 const FADE_MS = 380;
 
+// Thumbstick-driven globe navigation inside immersive VR.
+const XR_STICK_DEADZONE = 0.15;
+const XR_ROTATE_SPEED = 1.4; // rad/s at full stick deflection
+const XR_AUTOROTATE_SPEED = 0.15; // rad/s idle spin
+const XR_ZOOM_SPEED = 1.2; // scale factor rate at full deflection
+const XR_ZOOM_MIN = 0.45;
+const XR_ZOOM_MAX = 2.5;
+
 const COLOR_INK = 0x181c25;
 const COLOR_GRID = 0xc08a3e;
 const COLOR_BRASS = 0xd9a857;
@@ -78,6 +86,7 @@ export class GlobeScene {
   private hoveredHotspot: HotspotMesh | null = null;
   private controllers: THREE.XRTargetRaySpace[] = [];
   private resizeObserver: ResizeObserver;
+  private clock = new THREE.Clock();
 
   private mode: HubMode = 'globe';
 
@@ -547,6 +556,41 @@ export class GlobeScene {
     }
   }
 
+  /**
+   * In immersive VR the OrbitControls are disabled (the headset owns the
+   * camera), so the globe is driven directly from the thumbsticks: horizontal
+   * axis spins it, vertical axis zooms via the group scale. With no input it
+   * keeps a slow auto-rotate so the far-side markers come around on their own.
+   * Quest maps the thumbstick to axes[2]/axes[3]; axes[0]/axes[1] is the
+   * fallback for controllers that expose the stick there.
+   */
+  private updateXRNavigation(delta: number): void {
+    if (this.mode !== 'globe') return;
+    const session = this.renderer.xr.getSession();
+    if (!session) return;
+
+    let rotateInput = 0;
+    let zoomInput = 0;
+    for (const source of session.inputSources) {
+      const axes = source.gamepad?.axes;
+      if (!axes) continue;
+      const x = axes[2] ?? axes[0] ?? 0;
+      const y = axes[3] ?? axes[1] ?? 0;
+      if (Math.abs(x) > XR_STICK_DEADZONE) rotateInput += x;
+      if (Math.abs(y) > XR_STICK_DEADZONE) zoomInput += y;
+    }
+
+    const manualRotate = Math.abs(rotateInput) > 0.01;
+    const spin = manualRotate ? -rotateInput * XR_ROTATE_SPEED : XR_AUTOROTATE_SPEED;
+    this.globeGroup.rotation.y += spin * delta;
+
+    if (Math.abs(zoomInput) > 0.01) {
+      // Stick forward reads negative -> zoom in (scale up).
+      const next = this.globeGroup.scale.x * (1 - zoomInput * XR_ZOOM_SPEED * delta);
+      this.globeGroup.scale.setScalar(THREE.MathUtils.clamp(next, XR_ZOOM_MIN, XR_ZOOM_MAX));
+    }
+  }
+
   private setHoveredMarker(target: MarkerMesh | null): void {
     if (target === this.hoveredMarker) return;
     if (this.hoveredMarker) this.hoveredMarker.scale.setScalar(1);
@@ -613,6 +657,8 @@ export class GlobeScene {
     overlayMaterial.opacity += (this.overlayOpacityTarget - overlayMaterial.opacity) * 0.18;
 
     if (this.renderer.xr.isPresenting) {
+      const delta = Math.min(this.clock.getDelta(), 0.05);
+      this.updateXRNavigation(delta);
       for (const controller of this.controllers) this.updateControllerRay(controller);
     } else if (this.mode !== 'transitioning') {
       this.controls.update();
