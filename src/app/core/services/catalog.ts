@@ -221,10 +221,36 @@ const EXPERIENCES: Experience[] = [
     coordinates: '41.0000° N, 105.0000° W',
     lat: 41,
     lng: -105,
-    resolution: '6144×3072',
+    resolution: '4096×2048',
     scene: 'scene-dino',
-    description: 'Floresta de coníferas e samambaias densa, território de saurópodes e pterossauros.',
-    hotspots: [],
+    description:
+      'Um rio corta a floresta densa de coníferas e samambaias: um braquiossauro se refresca na correnteza enquanto tricerátops pastam à margem, estegossauros passam à direita e pterossauros cruzam o céu nublado.',
+    hotspots: [
+      { yaw: 50, pitch: 56, title: 'Braquiossauro', description: 'Saurópode de pescoço longo alimentando-se junto ao rio.' },
+      { yaw: 37, pitch: 62, title: 'Tricerátops', description: 'Dinossauros herbívoros de três chifres na margem esquerda.' },
+      { yaw: 63, pitch: 60, title: 'Estegossauros', description: 'Herbívoros com placas dorsais atravessando a vegetação à direita.' },
+    ],
+  },
+  {
+    id: 'jurassic-valley',
+    slug: 'jurassic-valley',
+    title: 'Vale dos Dinossauros',
+    categorySlug: 'jurassic',
+    date: 'c. 150 milhões a.C.',
+    year: -150000000,
+    location: 'Vale fluvial, Laurásia',
+    coordinates: '39.0000° N, 108.5000° W',
+    lat: 39,
+    lng: -108.5,
+    resolution: '4096×2048',
+    scene: 'scene-dino',
+    description:
+      'Vista do alto de um vale fluvial ao amanhecer: uma manada de braquiossauros percorre a mata enquanto tricerátops pastam nas planícies verdes, com o rio serpenteando entre montanhas ao fundo.',
+    hotspots: [
+      { yaw: 42, pitch: 50, title: 'Manada de Braquiossauros', description: 'Grupo de saurópodes migrando pela borda da floresta.' },
+      { yaw: 58, pitch: 58, title: 'Manada de Tricerátops', description: 'Herbívoros pastando em grupo nas planícies do vale.' },
+      { yaw: 50, pitch: 40, title: 'Vale Fluvial', description: 'Rio serpenteando entre montanhas rumo ao horizonte.' },
+    ],
   },
 ];
 
