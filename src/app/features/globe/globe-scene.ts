@@ -28,6 +28,14 @@ const XR_GRAB_PITCH_MAX = 0.85;
 // controller barely moved between them; more than this is read as a drag.
 const XR_SELECT_MOVE_TOLERANCE = 0.07; // radians
 
+// Aiming a ray straight through a marker only 0.02 wide is fiddly, and nearby
+// history points (e.g. the Normandy beaches) sit almost on top of each other at
+// globe scale. So markers are targeted by a forgiving aim cone rather than a
+// pinpoint ray: whichever lit marker is most centered under your aim wins, its
+// name shows in the tooltip, and the trigger opens that one. Zoom in to pull a
+// tight cluster apart when two names are hard to separate.
+const XR_AIM_CONE_COS = Math.cos(THREE.MathUtils.degToRad(7));
+
 // Panorama look-around: thumbstick left/right spins the 360 image around you so
 // you don't have to physically turn to see behind you.
 const XR_PANO_LOOK_SPEED = 1.3; // rad/s at full stick deflection
@@ -547,18 +555,39 @@ export class GlobeScene {
     return { yaw: Math.atan2(dir.x, dir.z), pitch: Math.asin(THREE.MathUtils.clamp(dir.y, -1, 1)) };
   }
 
-  private raycastMarker(controller: THREE.XRTargetRaySpace): MarkerMesh | null {
+  /**
+   * The lit marker most centered under the controller's aim, within a forgiving
+   * cone, skipping any on the far hemisphere (visually hidden behind the globe).
+   * Returns the marker plus its aim cosine (bigger = more centered) so callers
+   * can pick the best across both controllers.
+   */
+  private pickMarker(controller: THREE.XRTargetRaySpace): { marker: MarkerMesh; cos: number; dist: number } | null {
     const origin = new THREE.Vector3().setFromMatrixPosition(controller.matrixWorld);
-    const direction = new THREE.Vector3(0, 0, -1).applyMatrix4(new THREE.Matrix4().extractRotation(controller.matrixWorld));
-    this.raycaster.set(origin, direction);
-    return (this.raycaster.intersectObjects(this.markers, false)[0]?.object as MarkerMesh) ?? null;
+    const dir = new THREE.Vector3(0, 0, -1).applyMatrix4(new THREE.Matrix4().extractRotation(controller.matrixWorld)).normalize();
+    const center = this.globeGroup.getWorldPosition(new THREE.Vector3());
+    const toViewer = origin.clone().sub(center);
+    const world = new THREE.Vector3();
+
+    let best: { marker: MarkerMesh; cos: number; dist: number } | null = null;
+    for (const marker of this.markers) {
+      if ((marker.material as THREE.MeshBasicMaterial).opacity < 0.3) continue; // dimmed out by the era filter
+      marker.getWorldPosition(world);
+      if (world.clone().sub(center).dot(toViewer) <= 0) continue; // far side, occluded by the globe
+      const to = world.sub(origin);
+      const dist = to.length();
+      const cos = dir.dot(to) / dist;
+      if (cos < XR_AIM_CONE_COS) continue;
+      if (!best || cos > best.cos) best = { marker, cos, dist };
+    }
+    return best;
   }
 
-  // Trigger down: on a marker it arms a select; on empty space it grabs the
-  // globe so the coming controller sweep drags it. Only meaningful on the globe.
+  // Trigger down: if a marker is being aimed at (its name is showing in the
+  // tooltip) this arms a select; otherwise it grabs the globe so the coming
+  // controller sweep drags it. Only meaningful on the globe.
   private onXRSelectStart(controller: THREE.XRTargetRaySpace): void {
     if (this.mode !== 'globe') return;
-    const marker = this.raycastMarker(controller);
+    const marker = this.pickMarker(controller)?.marker ?? null;
     if (marker) {
       this.pendingSelect = { controller, marker, ...this.controllerYawPitch(controller) };
       return;
@@ -568,7 +597,7 @@ export class GlobeScene {
   }
 
   // Trigger up: release any grab; if the press began on a marker and the aim
-  // barely moved, treat it as a click and open that experience.
+  // still rests on that same marker (barely moved), open that experience.
   private onXRSelectEnd(controller: THREE.XRTargetRaySpace): void {
     if (this.grabController === controller) this.grabController = null;
 
@@ -578,7 +607,7 @@ export class GlobeScene {
 
     const { yaw, pitch } = this.controllerYawPitch(controller);
     const moved = Math.hypot(this.wrapAngle(yaw - pending.yaw), pitch - pending.pitch);
-    if (moved < XR_SELECT_MOVE_TOLERANCE && this.raycastMarker(controller) === pending.marker) {
+    if (moved < XR_SELECT_MOVE_TOLERANCE && this.pickMarker(controller)?.marker === pending.marker) {
       void this.transitionTo('panorama', pending.marker.userData.experience);
     }
   }
@@ -608,26 +637,38 @@ export class GlobeScene {
    * end every frame hidden and never render.
    */
   private updateControllers(): void {
-    const pool: THREE.Object3D[] = this.mode === 'panorama' ? this.activeHotspots : this.markers;
-    let best: THREE.Intersection | null = null;
-
-    for (const controller of this.controllers) {
-      const origin = new THREE.Vector3().setFromMatrixPosition(controller.matrixWorld);
-      const direction = new THREE.Vector3(0, 0, -1).applyMatrix4(new THREE.Matrix4().extractRotation(controller.matrixWorld));
-      this.raycaster.set(origin, direction);
-      const hits = this.raycaster.intersectObjects(pool, false);
-
-      const ray = controller.getObjectByName('ray') as THREE.Line | undefined;
-      if (ray) ray.scale.z = hits[0]?.distance ?? 1.4;
-
-      // The grabbing controller's ray sweeps across the globe during a drag;
-      // don't let it re-target markers under it.
-      if (this.mode !== 'panorama' && this.grabController === controller) continue;
-      if (hits[0] && (!best || hits[0].distance < best.distance)) best = hits[0];
+    if (this.mode === 'panorama') {
+      let best: THREE.Intersection | null = null;
+      for (const controller of this.controllers) {
+        const origin = new THREE.Vector3().setFromMatrixPosition(controller.matrixWorld);
+        const direction = new THREE.Vector3(0, 0, -1).applyMatrix4(new THREE.Matrix4().extractRotation(controller.matrixWorld));
+        this.raycaster.set(origin, direction);
+        const hits = this.raycaster.intersectObjects(this.activeHotspots, false);
+        this.setRayLength(controller, hits[0]?.distance ?? 1.4);
+        if (hits[0] && (!best || hits[0].distance < best.distance)) best = hits[0];
+      }
+      this.setHoveredHotspot((best?.object as HotspotMesh) ?? null);
+      return;
     }
 
-    if (this.mode === 'panorama') this.setHoveredHotspot((best?.object as HotspotMesh) ?? null);
-    else this.setHoveredMarker((best?.object as MarkerMesh) ?? null);
+    let best: { marker: MarkerMesh; cos: number; dist: number } | null = null;
+    for (const controller of this.controllers) {
+      // The grabbing controller's aim sweeps across the globe during a drag;
+      // don't let it re-target markers under it.
+      if (this.grabController === controller) {
+        this.setRayLength(controller, 1.4);
+        continue;
+      }
+      const pick = this.pickMarker(controller);
+      this.setRayLength(controller, pick?.dist ?? 1.4);
+      if (pick && (!best || pick.cos > best.cos)) best = pick;
+    }
+    this.setHoveredMarker(best?.marker ?? null);
+  }
+
+  private setRayLength(controller: THREE.XRTargetRaySpace, length: number): void {
+    const ray = controller.getObjectByName('ray') as THREE.Line | undefined;
+    if (ray) ray.scale.z = length;
   }
 
   // ------------------------------------------------------------- tooltip
@@ -756,7 +797,10 @@ export class GlobeScene {
       const dYaw = this.wrapAngle(yaw - this.grabPrev.yaw);
       const dPitch = pitch - this.grabPrev.pitch;
       this.grabPrev = { yaw, pitch };
-      this.globeGroup.rotation.y += dYaw * XR_GRAB_ROTATE_GAIN;
+      // Grab metaphor: the point under your hand follows your hand. Sweeping the
+      // controller right must carry the globe's front face right, which needs
+      // -dYaw here (aim yaw grows the opposite way to the surface it drags).
+      this.globeGroup.rotation.y -= dYaw * XR_GRAB_ROTATE_GAIN;
       this.globeGroup.rotation.x = THREE.MathUtils.clamp(
         this.globeGroup.rotation.x - dPitch * XR_GRAB_ROTATE_GAIN,
         XR_GRAB_PITCH_MIN,

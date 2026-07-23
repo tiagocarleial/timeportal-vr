@@ -74,10 +74,10 @@ const EXPERIENCES: Experience[] = [
     categorySlug: 'wwii',
     date: '6 de junho de 1944',
     year: 1944,
-    location: 'Normandia, França',
-    coordinates: '49.3958° N, 0.7000° W',
+    location: 'Pointe du Hoc, Normandia',
+    coordinates: '49.3958° N, 0.9894° W',
     lat: 49.3958,
-    lng: -0.7,
+    lng: -0.9894,
     resolution: '4096×2048',
     scene: 'scene-wwii',
     description:
