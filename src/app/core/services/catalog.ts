@@ -115,10 +115,15 @@ const EXPERIENCES: Experience[] = [
     coordinates: '50.2333° N, 5.9333° E',
     lat: 50.2333,
     lng: 5.9333,
-    resolution: '6144×3072',
+    resolution: '4096×2048',
     scene: 'scene-wwii',
-    description: 'A floresta das Ardenas sob neve intensa, durante a última grande ofensiva alemã no oeste.',
-    hotspots: [],
+    description:
+      'As Ardenas sob neve intensa, na última grande ofensiva alemã no oeste: tanques Sherman avançam pela estrada gelada enquanto a infantaria americana cruza os campos rumo a um vilarejo com igreja.',
+    hotspots: [
+      { yaw: 40, pitch: 52, title: 'Tanques Sherman', description: 'Coluna blindada americana avançando pela estrada coberta de neve.' },
+      { yaw: 62, pitch: 45, title: 'Vilarejo das Ardenas', description: 'Aldeia com igreja, ponto de resistência no inverno de 1944.' },
+      { yaw: 50, pitch: 60, title: 'Infantaria de Inverno', description: 'Soldados em capas brancas de camuflagem cruzando o campo aberto.' },
+    ],
   },
   {
     id: 'fall-of-berlin',
