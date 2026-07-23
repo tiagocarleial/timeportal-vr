@@ -68,6 +68,27 @@ const EXPERIENCES: Experience[] = [
     ],
   },
   {
+    id: 'd-day-beachhead',
+    slug: 'd-day-beachhead',
+    title: 'D-Day — Cabeça de Praia',
+    categorySlug: 'wwii',
+    date: '6 de junho de 1944',
+    year: 1944,
+    location: 'Normandia, França',
+    coordinates: '49.3958° N, 0.7000° W',
+    lat: 49.3958,
+    lng: -0.7,
+    resolution: '4096×2048',
+    scene: 'scene-wwii',
+    description:
+      'De dentro de uma trincheira aliada acima da praia: o tanque Sherman avança, a armada de invasão cobre o Canal ao fundo, caças e bombardeiros cruzam o céu nublado e balões de barragem protegem a cabeça de praia recém-conquistada.',
+    hotspots: [
+      { yaw: 50, pitch: 56, title: 'Tanque Sherman', description: 'Blindado M4 abrindo caminho a partir da trincheira.' },
+      { yaw: 61, pitch: 47, title: 'Armada Aliada', description: 'Centenas de navios e barcaças cruzando o Canal da Mancha.' },
+      { yaw: 40, pitch: 51, title: 'Bunker Alemão', description: 'Casamata de concreto da Muralha do Atlântico sobre a praia.' },
+    ],
+  },
+  {
     id: 'stalingrad',
     slug: 'stalingrad',
     title: 'Stalingrad',

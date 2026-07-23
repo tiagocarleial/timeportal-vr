@@ -601,25 +601,33 @@ export class GlobeScene {
     this.callbacks.onXRStateChange(false);
   };
 
-  private updateControllerRay(controller: THREE.XRTargetRaySpace): void {
-    const origin = new THREE.Vector3().setFromMatrixPosition(controller.matrixWorld);
-    const direction = new THREE.Vector3(0, 0, -1).applyMatrix4(new THREE.Matrix4().extractRotation(controller.matrixWorld));
-    this.raycaster.set(origin, direction);
-
+  /**
+   * Aim both controllers in one pass and pick the single nearest hit to hover.
+   * Doing this per-controller instead would let whichever controller points at
+   * empty space clear the hover the other one just set, so the tooltip would
+   * end every frame hidden and never render.
+   */
+  private updateControllers(): void {
     const pool: THREE.Object3D[] = this.mode === 'panorama' ? this.activeHotspots : this.markers;
-    const hits = this.raycaster.intersectObjects(pool, false);
-    const ray = controller.getObjectByName('ray') as THREE.Line | undefined;
-    if (ray) ray.scale.z = hits[0]?.distance ?? 1.4;
+    let best: THREE.Intersection | null = null;
 
-    if (this.mode === 'panorama') {
-      this.setHoveredHotspot((hits[0]?.object as HotspotMesh) ?? null);
-      return;
+    for (const controller of this.controllers) {
+      const origin = new THREE.Vector3().setFromMatrixPosition(controller.matrixWorld);
+      const direction = new THREE.Vector3(0, 0, -1).applyMatrix4(new THREE.Matrix4().extractRotation(controller.matrixWorld));
+      this.raycaster.set(origin, direction);
+      const hits = this.raycaster.intersectObjects(pool, false);
+
+      const ray = controller.getObjectByName('ray') as THREE.Line | undefined;
+      if (ray) ray.scale.z = hits[0]?.distance ?? 1.4;
+
+      // The grabbing controller's ray sweeps across the globe during a drag;
+      // don't let it re-target markers under it.
+      if (this.mode !== 'panorama' && this.grabController === controller) continue;
+      if (hits[0] && (!best || hits[0].distance < best.distance)) best = hits[0];
     }
 
-    // Don't let the grabbing controller's ray, which sweeps across the globe
-    // during a drag, keep re-targeting markers under it.
-    if (this.grabController === controller) return;
-    this.setHoveredMarker((hits[0]?.object as MarkerMesh) ?? null);
+    if (this.mode === 'panorama') this.setHoveredHotspot((best?.object as HotspotMesh) ?? null);
+    else this.setHoveredMarker((best?.object as MarkerMesh) ?? null);
   }
 
   // ------------------------------------------------------------- tooltip
@@ -731,7 +739,9 @@ export class GlobeScene {
         const x = source.gamepad?.axes?.[2] ?? source.gamepad?.axes?.[0] ?? 0;
         if (Math.abs(x) > XR_STICK_DEADZONE) look += x;
       }
-      if (Math.abs(look) > 0.01) this.panoramaGroup.rotation.y -= look * XR_PANO_LOOK_SPEED * delta;
+      // Stick left (negative) should turn your view left, which means spinning
+      // the surrounding image the same signed direction.
+      if (Math.abs(look) > 0.01) this.panoramaGroup.rotation.y += look * XR_PANO_LOOK_SPEED * delta;
       return;
     }
 
@@ -864,7 +874,7 @@ export class GlobeScene {
     if (this.renderer.xr.isPresenting) {
       const delta = Math.min(this.clock.getDelta(), 0.05);
       this.updateXRNavigation(delta);
-      for (const controller of this.controllers) this.updateControllerRay(controller);
+      this.updateControllers();
     } else if (this.mode !== 'transitioning') {
       this.controls.update();
     }
