@@ -21,32 +21,27 @@ export class Portal implements AfterViewInit, OnDestroy {
 
   private catalog = inject(Catalog);
   private scene?: GlobeScene;
-  private lockedTimer?: ReturnType<typeof setTimeout>;
 
   hoveredMarker = signal<Experience | null>(null);
   xrSupported = signal<boolean | null>(null);
   xrPresenting = signal(false);
   xrError = signal<string | null>(null);
-  lockedExperience = signal<Experience | null>(null);
 
   ngAfterViewInit(): void {
+    // Content is open everywhere: most visitors arrive on desktop without a
+    // headset, so gating the panoramas behind VR would leave them nothing to
+    // see (and nothing to share). The VR entry below stays as the richer path.
     this.scene = new GlobeScene(this.canvasHost.nativeElement, this.catalog.getExperiences(), {
       onMarkerHover: (experience) => this.hoveredMarker.set(experience),
       onHotspotHover: () => undefined,
       onModeChange: () => undefined,
-      onXRStateChange: (presenting) => {
-        this.xrPresenting.set(presenting);
-        this.scene?.setContentLocked(!presenting);
-      },
-      onLockedSelect: (experience) => this.showLocked(experience),
+      onXRStateChange: (presenting) => this.xrPresenting.set(presenting),
     });
 
-    this.scene.setContentLocked(true);
     this.scene.isXRSupported().then((supported) => this.xrSupported.set(supported));
   }
 
   ngOnDestroy(): void {
-    clearTimeout(this.lockedTimer);
     this.scene?.dispose();
   }
 
@@ -57,12 +52,5 @@ export class Portal implements AfterViewInit, OnDestroy {
     } catch {
       this.xrError.set('Não foi possível iniciar a sessão. Confira se o headset está conectado.');
     }
-  }
-
-  /** The locked notice is transient -- it answers a click and then gets out of the way. */
-  private showLocked(experience: Experience): void {
-    clearTimeout(this.lockedTimer);
-    this.lockedExperience.set(experience);
-    this.lockedTimer = setTimeout(() => this.lockedExperience.set(null), 5000);
   }
 }

@@ -38,7 +38,7 @@ const CATEGORIES: Category[] = [
   },
   {
     slug: 'jurassic',
-    name: 'Jurassic World',
+    name: 'Age of Dinosaurs',
     eyebrow: 'Pré-histórico',
     period: '65 MYA',
     scene: 'scene-dino',

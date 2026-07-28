@@ -35,22 +35,14 @@
 <div class="stage frame">
   <div #canvasHost class="canvas-host"></div>
 
-  <div class="info-bar">
-    @if (mode() === 'panorama') {
-      <button type="button" class="btn btn-ghost return-btn" (click)="returnToGlobe()">◐ Voltar ao Globo</button>
-      @if (panoramaExperience(); as exp) {
+  @if (mode() !== 'panorama') {
+    <div class="info-bar">
+      @if (hoveredMarker(); as exp) {
         <span class="info-title">{{ exp.title }}</span>
-        <span class="info-meta font-mono">{{ exp.date }} · {{ exp.location }}</span>
+        <span class="info-meta font-mono">{{ exp.date }} · {{ exp.location }} · {{ exp.resolution }}</span>
+      } @else {
+        <span class="info-hint font-mono">Passe o cursor sobre um marcador brass</span>
       }
-      @if (hoveredHotspot(); as spot) {
-        <span class="info-hotspot font-mono">◆ {{ spot.title }}</span>
-      }
-      <span class="info-hint font-mono">No headset: aperte o botão grip pra voltar</span>
-    } @else if (hoveredMarker(); as exp) {
-      <span class="info-title">{{ exp.title }}</span>
-      <span class="info-meta font-mono">{{ exp.date }} · {{ exp.location }} · {{ exp.resolution }}</span>
-    } @else {
-      <span class="info-hint font-mono">Passe o cursor sobre um marcador brass</span>
-    }
-  </div>
+    </div>
+  }
 </div>

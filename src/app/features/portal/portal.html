@@ -1,10 +1,7 @@
 <div #canvasHost class="stage"></div>
 
 <div class="veil">
-  @if (lockedExperience(); as exp) {
-    <p class="line title">{{ exp.title }}</p>
-    <p class="line locked font-mono">Este portal abre no VR — {{ exp.date }} · {{ exp.location }}</p>
-  } @else if (hoveredMarker(); as exp) {
+  @if (hoveredMarker(); as exp) {
     <p class="line title">{{ exp.title }}</p>
     <p class="line meta font-mono">{{ exp.date }} · {{ exp.location }}</p>
   } @else {

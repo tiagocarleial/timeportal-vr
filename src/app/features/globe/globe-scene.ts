@@ -4,8 +4,11 @@ import { Experience, Hotspot } from '../../core/models/experience.model';
 
 const EARTH_RADIUS = 1.2;
 const MARKER_RADIUS = EARTH_RADIUS + 0.012;
-const PANORAMA_RADIUS = 6;
-const HOTSPOT_RADIUS = PANORAMA_RADIUS - 0.5;
+// Panorama shell radius. Bigger reads as "farther/roomier" in VR (the surface
+// and its stereo depth move back), which is the gentle zoom-out the photos
+// needed — at 6 they felt too close, 9 still close. Hotspots ride just inside.
+const PANORAMA_RADIUS = 16;
+const HOTSPOT_RADIUS = PANORAMA_RADIUS - 0.7;
 const XR_GROUP_POSITION = new THREE.Vector3(0, 1.3, -1.6);
 const FADE_MS = 380;
 
@@ -16,6 +19,10 @@ const XR_AUTOROTATE_SPEED = 0.15; // rad/s idle spin
 const XR_ZOOM_SPEED = 1.2; // scale factor rate at full deflection
 const XR_ZOOM_MIN = 0.45;
 const XR_ZOOM_MAX = 2.5;
+// Scale the globe starts at when a VR session opens. At scale 1 the 1.2m-radius
+// globe sits 1.6m away and fills the whole view -- too close. This pulls it back
+// to a comfortable "whole globe in view" framing; the stick still zooms in/out.
+const XR_INITIAL_SCALE = 0.6;
 
 // Trigger-grab: hold the trigger over empty space and sweep the controller to
 // drag the globe around, like grabbing a physical desk globe. Gain > 1 turns a
@@ -372,14 +379,24 @@ export class GlobeScene {
     // Each experience opens facing forward, clearing any thumbstick look-around
     // carried over from the last panorama.
     this.panoramaGroup.rotation.set(0, 0, 0);
-    let group = this.panoramaCache.get(experience.slug);
-    if (!group) {
-      group = this.buildPanoramaGroup(experience);
-      this.panoramaCache.set(experience.slug, group);
-      this.panoramaGroup.add(group);
-    }
+    this.preloadPanorama(experience);
+    const group = this.panoramaCache.get(experience.slug)!;
     for (const [slug, cached] of this.panoramaCache) cached.visible = slug === experience.slug;
     this.activeHotspots = (group.userData['hotspots'] as HotspotMesh[]) ?? [];
+  }
+
+  /**
+   * Build a panorama's geometry and kick off its photo load ahead of time,
+   * caching it hidden. Called when a marker is aimed at so the heavy texture is
+   * usually already decoded by the time the trigger opens it -- the transition
+   * lands on a warm cache instead of a cold multi-megabyte decode.
+   */
+  private preloadPanorama(experience: Experience): void {
+    if (this.panoramaCache.has(experience.slug)) return;
+    const group = this.buildPanoramaGroup(experience);
+    group.visible = false;
+    this.panoramaCache.set(experience.slug, group);
+    this.panoramaGroup.add(group);
   }
 
   private buildPanoramaGroup(experience: Experience): THREE.Group {
@@ -411,16 +428,26 @@ export class GlobeScene {
 
   // Real 8K equirect photo when the pipeline has generated one for this slug;
   // the procedural gradient stays up until it lands, and survives a 404.
+  //
+  // ImageBitmapLoader decodes the JPEG on a worker thread instead of the main
+  // one, so a multi-megabyte panorama no longer stalls the render loop the frame
+  // it arrives -- that decode was the biggest hitch when opening an experience.
+  // For an ImageBitmap the GPU upload ignores Texture.flipY, so the flip has to
+  // be baked into the bitmap via imageOrientation to match a normal texture.
   private loadPanoramaPhoto(
     experience: Experience,
     material: THREE.MeshBasicMaterial,
     placeholder: THREE.Texture,
   ): void {
-    new THREE.TextureLoader().load(
+    const loader = new THREE.ImageBitmapLoader();
+    loader.setOptions({ imageOrientation: 'flipY' });
+    loader.load(
       `/panoramas/${experience.slug}.jpg`,
-      (photo) => {
+      (bitmap) => {
+        const photo = new THREE.Texture(bitmap);
         photo.colorSpace = THREE.SRGBColorSpace;
         photo.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+        photo.needsUpdate = true;
         material.map = photo;
         material.needsUpdate = true;
         placeholder.dispose();
@@ -619,12 +646,14 @@ export class GlobeScene {
   private onXRSessionStart = (): void => {
     this.controls.enabled = false;
     this.globeGroup.position.copy(XR_GROUP_POSITION);
+    this.globeGroup.scale.setScalar(XR_INITIAL_SCALE);
     this.callbacks.onXRStateChange(true);
   };
 
   private onXRSessionEnd = (): void => {
     this.controls.enabled = true;
     this.globeGroup.position.set(0, 0, 0);
+    this.globeGroup.scale.setScalar(1);
     this.grabController = null;
     this.pendingSelect = null;
     this.callbacks.onXRStateChange(false);
@@ -838,6 +867,8 @@ export class GlobeScene {
     if (target) {
       const e = target.userData.experience;
       this.setLabel(target, e.title, `${this.formatYear(e.year)} · ${e.location}`, LABEL_HEIGHT_GLOBE);
+      // Warm the panorama while the aim rests here, so opening it is instant.
+      this.preloadPanorama(e);
     } else {
       this.setLabel(null);
     }
